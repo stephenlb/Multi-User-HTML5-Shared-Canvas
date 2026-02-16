@@ -1,0 +1,64 @@
+<style>
+body, html, div {
+    margin: 0;
+    padding: 0;
+}
+canvas {
+    width: 100vw;
+    height: 100vh;
+}
+</style>
+
+<canvas id=canvas width=500 height=500></canvas>
+
+<div id=colors>
+    <color hex=ff0000></color>
+    <color hex=00ff00></color>
+    <color hex=0000ff></color>
+    <color hex=ffff00></color>
+    <color hex=00ffff></color>
+    <color hex=ff00ff></color>
+    <color hex=4a412a></color>
+</div>
+
+<script>
+// TODO draw line between last and current position
+// TODO check when mouse click is down <-- WARNING mobile
+const width      = 500;
+const height     = 500;
+const body       = document.querySelector('body');
+const pageWidth  = body.clientWidth;
+const pageHeight = body.clientHeight;
+const canvas     = document.getElementById('canvas');
+const context    = canvas.getContext('2d');
+let drawing      = false;
+
+context.lineWidth = 5;
+context.fillStyle = 'red';
+context.strokeStyle = 'red';
+canvas.addEventListener( 'mousedown', (event) => {
+    drawing = true;
+    context.beginPath();
+    const coords = getXY(event);
+    context.moveTo(coords.x, coords.y);
+});
+canvas.addEventListener( 'mouseup', (event) => {
+    drawing = false;
+});
+canvas.addEventListener( 'mousemove', (event) => {
+    if (!drawing) return;
+    const coords = getXY(event);
+    const x = coords.x;
+    const y = coords.y;
+
+    context.lineTo(x, y);
+    context.stroke(); 
+});
+
+function getXY(event) {
+    const x = Math.floor((event.offsetX / pageWidth) * width);
+    const y = Math.floor((event.offsetY / pageHeight) * height);
+
+    return {x:x, y:y};
+}
+</script>
