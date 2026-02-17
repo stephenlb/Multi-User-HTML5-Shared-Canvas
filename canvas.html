@@ -85,6 +85,12 @@ context.lineWidth = 5;
 context.fillStyle = 'red';
 context.strokeStyle = 'red';
 
+canvas.addEventListener( 'touchstart', (event) => {
+    drawing = true;
+    context.beginPath();
+    const coords = getXY(event);
+    context.moveTo(coords.x, coords.y);
+});
 canvas.addEventListener( 'mousedown', (event) => {
     drawing = true;
     context.beginPath();
@@ -93,6 +99,26 @@ canvas.addEventListener( 'mousedown', (event) => {
 });
 canvas.addEventListener( 'mouseup', (event) => {
     drawing = false;
+});
+canvas.addEventListener( 'touchend', (event) => {
+    drawing = false;
+});
+canvas.addEventListener( 'touchmove', (event) => {
+    if (!drawing) return;
+    const coords = getXY(event);
+    const x = coords.x;
+    const y = coords.y;
+    context.lineTo(x, y);
+    context.stroke(); 
+
+    // Prevent broadcast unless we have enough data
+    if (previous.x) {
+        broadcast(previous.x, previous.y, x, y, context.strokeStyle);
+    }
+
+    // Save last position for connecting lines on subscription
+    previous.x = x;
+    previous.y = y;
 });
 canvas.addEventListener( 'mousemove', (event) => {
     if (!drawing) return;
