@@ -56,7 +56,9 @@ div#colors color:active {
 
 <script src="pubnub.js"></script>
 <script>
+// TODO add canvas load history
 // TODO context per remote user ( so each user can draw )
+// TODO add number ONLINE USERS
 // TODO mobile support (on touchstart touchend touchmove )
 // TODO draw line between last and current position
 // TODO check when mouse click is down <-- WARNING mobile
@@ -69,6 +71,7 @@ const pageWidth  = body.clientWidth;
 const pageHeight = body.clientHeight;
 const canvas     = document.getElementById('canvas');
 const context    = canvas.getContext('2d');
+// TODO make into array of contexts
 const remoteCtx  = canvas.getContext('2d');
 let drawing      = false;
 
