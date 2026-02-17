@@ -54,10 +54,13 @@ div#colors color:active {
     <color hex=#4a412a></color>
 </div>
 
+<script src="pubnub.js"></script>
 <script>
 // TODO mobile support (on touchstart touchend touchmove )
 // TODO draw line between last and current position
 // TODO check when mouse click is down <-- WARNING mobile
+const pubnub     = PubNub({});
+const channel    = 'shared-canvas';
 const width      = 500;
 const height     = 500;
 const body       = document.querySelector('body');
@@ -65,6 +68,7 @@ const pageWidth  = body.clientWidth;
 const pageHeight = body.clientHeight;
 const canvas     = document.getElementById('canvas');
 const context    = canvas.getContext('2d');
+const context2   = canvas.getContext('2d');
 let drawing      = false;
 
 // Fill background with dark mode because Janlu
@@ -90,9 +94,17 @@ canvas.addEventListener( 'mousemove', (event) => {
     const coords = getXY(event);
     const x = coords.x;
     const y = coords.y;
-
     context.lineTo(x, y);
     context.stroke(); 
+
+    // Prevent broadcast unless we have enough data
+    if (previous.x){
+        broadcast(previous.x, x, previous.y, y, context.strokeStyle);
+    }
+
+    // Save last position for connecting lines on subscription
+    previous.x = x;
+    previous.y = y;
 });
 
 function getXY(event) {
@@ -110,5 +122,35 @@ colors.addEventListener( 'click', (event) => {
     context.strokeStyle = color;
 });
 
+// Multi-user canvas
+function draw(x1, x2, y1, y2, style) {
+    console.log(x1, x2, y1, y2, style);
+}
+
+pubnub.subscribe({
+    channel: channel,
+    messages: (message) => {
+        draw(
+            message.x1,
+            message.y1,
+            message.x2,
+            message.y2,
+            message.style
+        );
+    }
+});
+let previous = { x: 0, y: 0 };
+function broadcast(x1, x2, y1, y2, style) {
+    pubnub.publish({
+        channel: channel,
+        message: {
+            x1: x1,
+            x2: x2,
+            y1: y1,
+            y2: y2,
+            style: style,
+        },
+    });
+}
 
 </script>

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "pubnub-sse": "^1.0.8"
+  }
+}
