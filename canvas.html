@@ -1,3 +1,9 @@
+<html>
+<head>
+    <title>Shared Canvas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
 <style>
 body, html, div {
     margin: 0;
@@ -61,101 +67,107 @@ div#colors color.active {
 
 <script src="pubnub.js"></script>
 <script>
+// TODO add pen icon
+// TODO filter-expresion remove on userId
+// TODO fix color per user
+// TODO transmit curosor movent
+// TODO context per remote user ( so each user can draw )
 // TODO disable local drawing (maybe) or exclude self-draw
 // TODO when creating  multiple context, even yourself is in the list
 // TODO auto detect shape and draw perfect cirlc / box square
-// TODO event.preventDefault();
 // TODO refactor so we can reuse 
 // TODO on page resize update canvas vars so painting is accurate
 // TODO add canvas load history
-// TODO context per remote user ( so each user can draw )
 // TODO add number ONLINE USERS
-// TODO mobile support (on touchstart touchend touchmove )
 // TODO draw line between last and current position
-// TODO check when mouse click is down <-- WARNING mobile
+const userId     = `userId-${Math.random()}.${Math.random()}`;
 const pubnub     = PubNub({});
-const channel    = 'shared-canvas';
+const channel    = 'shared-canvas-v2';
 const width      = 500;
 const height     = 500;
 const body       = document.querySelector('body');
-const pageWidth  = body.clientWidth;
-const pageHeight = body.clientHeight;
 const canvas     = document.getElementById('canvas');
+const contexts   = {};
 const context    = canvas.getContext('2d');
-// TODO make into array of contexts
-const remoteCtx  = canvas.getContext('2d');
-let drawing      = false;
+
+// Get user with context and x/y coords
+getUser(userId);
+function getUser(userId) {
+    if (userId in contexts) return contexts[userId];
+    contexts[userId] = {
+        context : canvas.getContext('2d'),
+        state: {
+            userId  : userId,
+            drawing : false,
+            coords  : { x: 0, y: 0},
+            style   : 'red',
+        },
+    };
+    const user = contexts[userId];
+    user.context.lineWidth = 5;
+    user.context.strokeStyle = 'red';
+    return user;
+}
 
 // Fill background with dark mode because Janlu
 context.fillStyle = "#181818";
 context.fillRect(0, 0, canvas.width, canvas.height);
 
-// Set remote context draw styel
-remoteCtx.lineWidth = 5;
-remoteCtx.fillStyle = 'red';
-remoteCtx.strokeStyle = 'red';
+// Draw line
+function draw(userId) {
+    const user    = getUser(userId);
+    const context = user.context;
+    const coords  = user.state.coords;
+    const style   = user.state.style;
 
-// Set draw style
-context.lineWidth = 5;
-context.fillStyle = 'red';
-context.strokeStyle = 'red';
-
-canvas.addEventListener( 'touchstart', (event) => {
-    event.preventDefault();
-    drawing = true;
-    context.beginPath();
-    const coords = getXY(event);
-    context.moveTo(coords.x, coords.y);
-});
-canvas.addEventListener( 'mousedown', (event) => {
-    drawing = true;
-    context.beginPath();
-    const coords = getXY(event);
-    context.moveTo(coords.x, coords.y);
-});
-canvas.addEventListener( 'mouseup', (event) => {
-    drawing = false;
-});
-canvas.addEventListener( 'touchend', (event) => {
-    event.preventDefault();
-    drawing = false;
-});
-canvas.addEventListener( 'touchmove', (event) => {
-    event.preventDefault();
-    if (!drawing) return;
-    const coords = getXY(event);
-    const x = coords.x;
-    const y = coords.y;
-    context.lineTo(x, y);
-    context.stroke(); 
-
-    // Prevent broadcast unless we have enough data
-    if (previous.x) {
-        broadcast(previous.x, previous.y, x, y, context.strokeStyle);
+    // Start
+    if (!user.state.drawing) {
+        context.strokeStyle = style;
+        context.beginPath();
+        context.moveTo(coords.x, coords.y);
     }
 
-    // Save last position for connecting lines on subscription
-    previous.x = x;
-    previous.y = y;
-});
-canvas.addEventListener( 'mousemove', (event) => {
-    if (!drawing) return;
-    const coords = getXY(event);
-    const x = coords.x;
-    const y = coords.y;
-    context.lineTo(x, y);
-    context.stroke(); 
-
-    // Prevent broadcast unless we have enough data
-    if (previous.x) {
-        broadcast(previous.x, previous.y, x, y, context.strokeStyle);
+    // Draw line
+    if (user.state.drawing) {
+        context.lineTo(coords.x, coords.y);
+        context.stroke(); 
     }
+}
 
-    // Save last position for connecting lines on subscription
-    previous.x = x;
-    previous.y = y;
-});
+function startCapture(event) {
+    event.preventDefault();
+    const user = getUser(userId);
+    user.state.coords = getXY(event);
+    user.state.drawing = true;
+    broadcast(user.state);
+}
+function moveCapture(event) {
+    event.preventDefault();
+    const user = getUser(userId);
+    user.state.coords = getXY(event);
+    broadcast(user.state);
+}
+function endCapture(event) {
+    event.preventDefault();
+    const user = getUser(userId);
+    user.state.coords = getXY(event);
+    user.state.drawing = false;
+    broadcast(user.state);
+}
 
+// Start
+canvas.addEventListener( 'touchstart', startCapture);
+canvas.addEventListener( 'mousedown', startCapture);
+
+// End
+canvas.addEventListener( 'mouseup', endCapture);
+canvas.addEventListener( 'touchend', endCapture);
+
+// Move
+canvas.addEventListener( 'touchmove', moveCapture);
+canvas.addEventListener( 'mousemove', moveCapture);
+
+// Get Scaled Coordinates
 function getXY(event) {
     const touch = event.changedTouches; 
     let x = 0;
@@ -169,53 +181,40 @@ function getXY(event) {
         y = event.offsetY;
     }
     return {
-        x: Math.floor((x / pageWidth) * width),
-        y: Math.floor((y / pageHeight) * height)
+        x: Math.floor((x / body.clientWidth) * width),
+        y: Math.floor((y / body.clientHeight) * height),
     }
 }
 
+// Color Picker
 const colors = document.getElementById('colors');
 colors.addEventListener( 'click', (event) => {
+    const user = getUser(userId);
     const target = event.target;
     const color = target.getAttribute('hex');
     if (!color) return;
-    context.strokeStyle = color;
+    user.context.strokeStyle = color;
+    user.state.style = color;
     document.querySelectorAll('#colors color').forEach(c => c.classList.remove('active'));
     target.classList.add('active');
 });
 
-// Multi-user canvas
-function draw(x1, x2, y1, y2, style) {
-    context.strokeStyle = style;
-    remoteCtx.beginPath();
-    remoteCtx.moveTo(x1, y1);
-    remoteCtx.lineTo(x2, y2);
-    remoteCtx.stroke(); 
-}
-
 pubnub.subscribe({
     channel: channel,
-    messages: (message) => {
-        draw(
-            message.x1,
-            message.y1,
-            message.x2,
-            message.y2,
-            message.style
-        );
+    messages: (state) => {
+        const userId = state.userId;
+        const user = getUser(userId);
+        user.state = state;
+        draw(userId);
     }
 });
-let previous = { x: 0, y: 0 };
-function broadcast(x1, x2, y1, y2, style) {
+
+function broadcast(state) {
     pubnub.publish({
         channel: channel,
-        message: {
-            x1: x1,
-            x2: x2,
-            y1: y1,
-            y2: y2,
-            style: style,
-        },
+        message: state,
     });
 }
 </script>
+</body>
+</html>
