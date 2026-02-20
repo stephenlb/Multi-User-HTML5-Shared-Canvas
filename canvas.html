@@ -1,10 +1,11 @@
 <html>
-<!-- ✅ TODO add number ONLINE USERS -->
+
+    <!-- ✅ TODO add number ONLINE USERS -->
 <!-- TODO add canvas load history -->
 <!-- TODO undo button -->
 <!-- TODO line width PEN SIZE PEN SIZE -->
 <!-- TODO canvas strech fix -->
-<head>
+    <head>
     <title>Shared Canvas</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
@@ -90,7 +91,10 @@ const canvas  = document.getElementById('canvas');
 const users   = {};
 const context = canvas.getContext('2d');
 
-// Get user by ID. Can be remote or local user
+// --- Detection Tracking ---
+let myStrokes = [];
+let currentStroke = [];
+
 function getUser(id) {
     if (id in users) return users[id];
     users[id] = {
@@ -103,11 +107,12 @@ function getUser(id) {
     return users[id];
 }
 
-// Fill background with dark mode because Janlu
-context.fillStyle = "#181818";
-context.fillRect(0, 0, canvas.width, canvas.height);
+function clearCanvas() {
+    context.fillStyle = "#181818";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+}
+clearCanvas();
 
-// Draw line segment between last and current position
 function draw(userId) {
     const user   = getUser(userId);
     const coords = user.coords;
@@ -138,17 +143,31 @@ function capture(event) {
     event.preventDefault();
     const user = getUser(userId);
     user.coords = getXY(event);
-    if (event.type === 'pointerdown') user.drawing = true;
-    if (event.type === 'pointerup')   user.drawing = false;
+
+    if (event.type === 'pointerdown') {
+        user.drawing = true;
+        currentStroke = [user.coords];
+    }
+    
+    if (event.type === 'pointermove' && user.drawing) {
+        currentStroke.push(user.coords);
+    }
+
+    if (event.type === 'pointerup') {
+        user.drawing = false;
+        if (currentStroke.length > 2) {
+            myStrokes.push(currentStroke);
+            checkShapeModeration();
+        }
+    }
+
     if (user.drawing || event.type === 'pointerup') broadcast(user);
 }
 
-// Event Listeners
 canvas.addEventListener('pointerdown', capture);
 canvas.addEventListener('pointermove', capture);
 canvas.addEventListener('pointerup',   capture);
 
-// Get Scaled Coordinates
 function getXY(event) {
     return {
         x: Math.floor((event.clientX / body.clientWidth) * canvas.width),
@@ -156,7 +175,6 @@ function getXY(event) {
     };
 }
 
-// Color Picker
 const colors = document.getElementById('colors');
 colors.addEventListener( 'click', (event) => {
     const user = getUser(userId);
@@ -171,13 +189,17 @@ colors.addEventListener( 'click', (event) => {
 pubnub.subscribe({
     channel: channel,
     messages: (state) => {
+        if (state.action === 'clear') {
+            clearCanvas();
+            myStrokes = [];
+            return;
+        }
         const user = getUser(state.userId);
         Object.assign(user, state);
         draw(state.userId);
     }
 });
 
-// Number of users online right now
 const occupancyDiv = document.getElementById('occupancy');
 pubnub.subscribe({
     channel: `${channel}-pnpres`,
@@ -190,11 +212,72 @@ pubnub.subscribe({
 function broadcast(state) {
     pubnub.publish({
         channel: channel,
-            message: state,
-        });
+        message: state,
+    });
+}
+
+// --- Moderation Logic ---
+
+// Set your sensitivity here (0.0 to 1.0)
+const MATCH_THRESHOLD = 0.85; 
+
+function checkShapeModeration() {
+    if (myStrokes.length < 3) return;
+
+    let circleScores = [];
+    let lineScores = [];
+
+    myStrokes.forEach(stroke => {
+        const box = getBoundingBox(stroke);
+        const w = box.maxX - box.minX;
+        const h = box.maxY - box.minY;
+        if (w < 10 || h < 10) return;
+
+        const ratio = Math.max(w, h) / Math.min(w, h);
+        
+        // Calculate how close it is to a perfect circle (ratio 1.0)
+        // Score is 1.0 if perfect, decreasing as it gets oblong
+        let cScore = Math.max(0, 1 - Math.abs(ratio - 1.1) / 1.0);
+        circleScores.push(cScore);
+
+        // Calculate how close it is to a shaft (ratio 3.0 or higher)
+        let lScore = Math.min(1.0, ratio / 3.0);
+        lineScores.push(lScore);
+    });
+
+    // Sort scores to pick the "best" matches currently on the canvas
+    circleScores.sort((a, b) => b - a);
+    lineScores.sort((a, b) => b - a);
+
+    // If we have at least 2 circle-ish things and 1 line-ish thing
+    if (circleScores.length >= 2 && lineScores.length >= 1) {
+        // Average the top matches
+        const totalMatch = (circleScores[0] + circleScores[1] + lineScores[0]) / 3;
+
+        console.log(`Match Probability: ${(totalMatch * 100).toFixed(2)}%`);
+
+        if (totalMatch >= MATCH_THRESHOLD) {
+            executeErase();
+        }
+    }
+}
+
+function executeErase() {
+    clearCanvas();
+    myStrokes = [];
+    broadcast({ action: 'clear', userId: userId });
+    console.warn("Canvas cleared: High probability of inappropriate content.");
 }
 
 
+function getBoundingBox(stroke) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    stroke.forEach(p => {
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+    });
+    return { minX, minY, maxX, maxY };
+}
 /*
 function loadHistory(channel, limit) {
 }
@@ -233,7 +316,6 @@ function get_all_history(args) {
     function add_messages() { net.history(params) }
 }
 */
-
 </script>
 </body>
 </html>
