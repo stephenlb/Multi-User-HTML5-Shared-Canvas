@@ -142,6 +142,24 @@ const publish = PubNub.publish = async (setup={}) => {
     catch(e) { return false }
 };
 
+const history = PubNub.history = async (setup={}) => {
+    let subkey    = setup.subscribeKey || PubNub.subscribeKey || defaultSubkey;
+    let channel   = setup.channel      || PubNub.channel      || defaultChannel;
+    let origin    = setup.origin       || PubNub.origin       || defaultOrigin;
+    let authkey   = setup.authKey      || PubNub.authKey      || defaultAuthKey;
+    let uuid      = setup.userId       || PubNub.userId       || defaultUserId;
+    let count     = setup.count        || 1;
+    let uri       = `https://${origin}/v2/history/sub-key/${subkey}/channel/${channel}`;
+    let params    = `count=${count}&auth=${authkey}&uuid=${uuid}`;
+
+    try {
+        let response = await fetch(`${uri}?${params}`);
+        let data     = await response.json();
+        return data;
+    }
+    catch(e) { return null }
+};
+
 // Conditionally export pubnub.js for Node.js and Browser
 if (typeof module !== 'undefined') module.exports = PubNub;
 if (typeof window !== 'undefined') window.PubNub = PubNub;
