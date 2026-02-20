@@ -219,7 +219,7 @@ function broadcast(state) {
 // --- Moderation Logic ---
 
 // Set your sensitivity here (0.0 to 1.0)
-const MATCH_THRESHOLD = 0.85; 
+const MATCH_THRESHOLD = 0.65; 
 
 function checkShapeModeration() {
     if (myStrokes.length < 3) return;
@@ -231,27 +231,30 @@ function checkShapeModeration() {
         const box = getBoundingBox(stroke);
         const w = box.maxX - box.minX;
         const h = box.maxY - box.minY;
-        if (w < 10 || h < 10) return;
-
-        const ratio = Math.max(w, h) / Math.min(w, h);
         
-        // Calculate how close it is to a perfect circle (ratio 1.0)
-        // Score is 1.0 if perfect, decreasing as it gets oblong
-        let cScore = Math.max(0, 1 - Math.abs(ratio - 1.1) / 1.0);
+        // FIX: Use && instead of ||. 
+        // We want to ignore tiny dots, but keep long, thin lines!
+        if (w < 10 && h < 10) return; 
+
+        // FIX: Add a tiny amount (0.1) to prevent division by zero on perfect lines
+        const minDim = Math.min(w, h) + 0.1;
+        const maxDim = Math.max(w, h);
+        const ratio = maxDim / minDim;
+        
+        // FIX: More forgiving circle score. 
+        // A hand-drawn circle up to a 1.8 ratio will still get partial credit.
+        let cScore = Math.max(0, 1 - (Math.abs(ratio - 1.0) / 0.8));
         circleScores.push(cScore);
 
-        // Calculate how close it is to a shaft (ratio 3.0 or higher)
+        // Shaft detection remains mostly the same, naturally benefiting from the division by zero fix
         let lScore = Math.min(1.0, ratio / 3.0);
         lineScores.push(lScore);
     });
 
-    // Sort scores to pick the "best" matches currently on the canvas
     circleScores.sort((a, b) => b - a);
     lineScores.sort((a, b) => b - a);
 
-    // If we have at least 2 circle-ish things and 1 line-ish thing
     if (circleScores.length >= 2 && lineScores.length >= 1) {
-        // Average the top matches
         const totalMatch = (circleScores[0] + circleScores[1] + lineScores[0]) / 3;
 
         console.log(`Match Probability: ${(totalMatch * 100).toFixed(2)}%`);
